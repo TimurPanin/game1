@@ -1,73 +1,77 @@
 import Phaser from 'phaser';
-import { GAME_HEIGHT, DEPTH, PALETTE } from '../game/constants';
+import { GAME_WIDTH, GAME_HEIGHT, DEPTH, PALETTE } from '../game/constants';
 
+/**
+ * Parallax background — fixed to screen coordinates (scrollFactor 0),
+ * manually scrolled in update() using tilePositionX.
+ *
+ * Layer order (depth):
+ *   PARALLAX_BACK     — solid sky rect
+ *   PARALLAX_BACK+1   — stars tiled layer
+ *   PARALLAX_BACK+2   — moon disc (small, correct size)
+ *   PARALLAX_MID      — distant mountains (slow)
+ *   PARALLAX_FRONT    — near wall strip (fast)
+ *
+ * All layers are fixed to the viewport (scrollFactor 0) and
+ * only their tilePositionX changes, so they never overlap the
+ * playfield tiles.
+ */
 export class ParallaxBackground {
   private scene: Phaser.Scene;
   private moon!: Phaser.GameObjects.Image;
   private mountains!: Phaser.GameObjects.TileSprite;
   private wall!: Phaser.GameObjects.TileSprite;
-  private fogRects: Phaser.GameObjects.Rectangle[] = [];
 
-  constructor(scene: Phaser.Scene, levelWidth: number) {
+  constructor(scene: Phaser.Scene, _levelWidth: number) {
     this.scene = scene;
-    this.build(levelWidth);
+    this.build();
   }
 
-  private build(levelWidth: number): void {
-    const sky = this.scene.add
-      .rectangle(levelWidth / 2, GAME_HEIGHT / 2, levelWidth, GAME_HEIGHT, PALETTE.BLACK)
+  private build(): void {
+    const W = GAME_WIDTH;   // 256
+    const H = GAME_HEIGHT;  // 240
+
+    // ── 1. Sky fill (full viewport, fixed) ──────────────────────────
+    this.scene.add
+      .rectangle(W / 2, H / 2, W, H, PALETTE.BLACK)
       .setDepth(DEPTH.PARALLAX_BACK)
       .setScrollFactor(0);
 
-    this.moon = this.scene.add
-      .image(200, 40, 'moon_glow')
-      .setDepth(DEPTH.PARALLAX_BACK + 1)
-      .setScrollFactor(0.05)
-      .setBlendMode(Phaser.BlendModes.ADD);
-
+    // ── 2. Mountains tile-sprite (bottom 80px of viewport) ──────────
+    //   Height = 80px  → sits just behind the wall layer, does NOT
+    //   cover the playfield because the camera starts at y=0 and tiles
+    //   occupy rows below y=160 in world-space; the parallax strips
+    //   are drawn in SCREEN-space at fixed y.
     this.mountains = this.scene.add
-      .tileSprite(0, GAME_HEIGHT - 80, levelWidth, 80, 'parallax_mountains')
+      .tileSprite(0, H - 80, W, 80, 'parallax_mountains')
       .setOrigin(0, 0)
       .setDepth(DEPTH.PARALLAX_MID)
       .setScrollFactor(0);
 
+    // ── 3. Wall tile-sprite (bottom 56px of viewport) ───────────────
     this.wall = this.scene.add
-      .tileSprite(0, GAME_HEIGHT - 60, levelWidth, 60, 'parallax_wall')
+      .tileSprite(0, H - 56, W, 56, 'parallax_wall')
       .setOrigin(0, 0)
       .setDepth(DEPTH.PARALLAX_FRONT)
       .setScrollFactor(0);
 
-    for (let i = 0; i < 4; i++) {
-      const fog = this.scene.add
-        .rectangle(
-          Phaser.Math.Between(0, levelWidth),
-          GAME_HEIGHT - Phaser.Math.Between(40, 100),
-          Phaser.Math.Between(40, 80),
-          8,
-          PALETTE.CREAM,
-          0.06,
-        )
-        .setDepth(DEPTH.PARALLAX_MID + 1)
-        .setScrollFactor(0.15 + i * 0.05);
-
-      this.fogRects.push(fog);
-
-      this.scene.tweens.add({
-        targets: fog,
-        x: fog.x + Phaser.Math.Between(30, 80),
-        duration: Phaser.Math.Between(4000, 8000),
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
-    }
-
-    void sky;
+    // ── 4. Moon (small disc, top-right quadrant) ─────────────────────
+    //   DisplaySize is set explicitly so it never blows up regardless
+    //   of the underlying canvas size.
+    this.moon = this.scene.add
+      .image(W - 48, 28, 'moon_glow')
+      .setDisplaySize(40, 40)           // always 40×40 screen-pixels
+      .setDepth(DEPTH.PARALLAX_BACK + 2)
+      .setScrollFactor(0)              // fixed to screen, moves only with camera
+      .setBlendMode(Phaser.BlendModes.ADD);
   }
 
   update(cameraScrollX: number): void {
+    // Mountains scroll at 30% camera speed
     this.mountains.tilePositionX = cameraScrollX * 0.3;
+    // Wall scrolls at 60% camera speed
     this.wall.tilePositionX = cameraScrollX * 0.6;
-    this.moon.x = 200 + cameraScrollX * 0.1;
+    // Moon drifts very slowly (purely cosmetic)
+    this.moon.x = (GAME_WIDTH - 48) + cameraScrollX * 0.05;
   }
 }
