@@ -274,7 +274,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private emitHUD(): void {
-    this.events.emit('updateHUD', { lives: this.monk.lives, score: this.score });
+    this.events.emit('updateHUD', {
+      lives: this.monk.lives,
+      score: this.score,
+      hp: this.monk.hp,
+      maxHp: this.monk.maxHp,
+    });
   }
 
   private handleMonkDeath(): void {
@@ -315,6 +320,11 @@ export class GameScene extends Phaser.Scene {
     this.combat.updateAttackHitbox();
     this.combat.update(delta);
 
+    // Emit spirit cooldown state every frame for the SP gauge in UIScene
+    this.events.emit('updateSpirit', {
+      cooldownRatio: this.monk.getSpiritCooldownRatio(),
+    });
+
     const px = this.monk.sprite.x;
     const py = this.monk.sprite.y;
 
@@ -323,14 +333,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.boss && !this.boss.isDead()) {
-      this.boss.update(delta, px);
+      this.boss.update(delta, px, py);
     }
 
+    // Trigger boss at arena
     if (!this.bossTriggered && px >= level1.bossArenaX) {
       this.triggerBoss();
     }
 
-    this.checkCollapsingPlatforms();
     this.parallax.update(this.cameras.main.scrollX);
+    this.checkCollapsingPlatforms();
   }
 }
