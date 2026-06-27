@@ -47,3 +47,10 @@ export const SCORE = {
   ENEMY: 100,
   BOSS: 500,
 } as const;
+
+/** HP-based health system: each "life" has MONK_HP_PER_LIFE hit points */
+export const MONK_MAX_LIVES = 3;
+export const MONK_HP_PER_LIFE = 3;
+
+/** localStorage key for high score persistence */
+export const HIGH_SCORE_KEY = 'lotrd_hi';

@@ -1,11 +1,17 @@
 import Phaser from 'phaser';
-import { DEPTH, PHYSICS } from '../game/constants';
+import { DEPTH, PHYSICS, MONK_HP_PER_LIFE, MONK_MAX_LIVES } from '../game/constants';
 import { JuiceManager } from '../systems/JuiceManager';
 import { sfx } from '../utils/SfxManager';
 
 export class Monk {
   sprite: Phaser.Physics.Arcade.Sprite;
-  lives = 3;
+  lives = MONK_MAX_LIVES;
+
+  /** Current HP within the current life */
+  hp = MONK_HP_PER_LIFE;
+  /** Max HP per life */
+  readonly maxHp = MONK_HP_PER_LIFE;
+
   private scene: Phaser.Scene;
   private juice: JuiceManager;
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -24,7 +30,7 @@ export class Monk {
   private comboTimer = 0;
   private attacking = false;
   private attackTimer = 0;
-  private spiritCooldown = 0;
+  spiritCooldown = 0;
   private spiritCharge = 0;
   private chargingSpirit = false;
   private frozen = false;
@@ -126,7 +132,13 @@ export class Monk {
 
   takeDamage(knockbackX = 0): void {
     if (this.invincible || this.frozen) return;
-    this.lives--;
+
+    this.hp--;
+    if (this.hp <= 0) {
+      this.hp = MONK_HP_PER_LIFE;
+      this.lives--;
+    }
+
     this.invincible = true;
     sfx.damage();
     this.onDamage();
@@ -165,6 +177,15 @@ export class Monk {
 
   isAttacking(): boolean {
     return this.attacking;
+  }
+
+  getSpiritChargeRatio(): number {
+    if (!this.chargingSpirit) return 0;
+    return Math.min(this.spiritCharge / PHYSICS.SPIRIT_CHARGE_MS, 1);
+  }
+
+  getSpiritCooldownRatio(): number {
+    return Math.min(this.spiritCooldown / PHYSICS.SPIRIT_COOLDOWN_MS, 1);
   }
 
   update(dt: number, onAttackEnd: () => void): void {
@@ -217,6 +238,19 @@ export class Monk {
       }
     }
 
+    // Spirit charge tint: gradient from yellow to white as charge builds
+    if (this.chargingSpirit) {
+      this.spiritCharge += dt;
+      const ratio = Math.min(this.spiritCharge / PHYSICS.SPIRIT_CHARGE_MS, 1);
+      // Interpolate tint: 0xffe566 (yellow) -> 0xffffff (white)
+      const r = Math.round(0xff);
+      const g = Math.round(0xe5 + (0xff - 0xe5) * ratio);
+      const b = Math.round(0x66 + (0xff - 0x66) * ratio);
+      this.sprite.setTint((r << 16) | (g << 8) | b);
+    } else {
+      this.sprite.clearTint();
+    }
+
     // Attack timer
     if (this.attacking) {
       this.attackTimer -= dt;
@@ -227,16 +261,6 @@ export class Monk {
     }
 
     if (this.comboTimer > 0) this.comboTimer -= dt;
-
-    if (this.chargingSpirit) {
-      this.spiritCharge += dt;
-      if (this.spiritCharge >= PHYSICS.SPIRIT_CHARGE_MS) {
-        this.sprite.setTint(0xffe566);
-      }
-    } else {
-      this.sprite.clearTint();
-    }
-
     if (this.spiritCooldown > 0) this.spiritCooldown -= dt;
   }
 }
